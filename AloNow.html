@@ -1,0 +1,1208 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Звонки • Контакты • Поиск</title>
+  <style>
+    :root{
+      --bg:#0f0f10;
+      --panel:rgba(30,30,34,.72);
+      --border:rgba(255,255,255,.06);
+      --accent:#4a9eff;
+      --text:#cfcfcf;
+      --text-active:#ffffff;
+      --pill:rgba(74,158,255,.18);
+      --ok:#19c37d;
+      --danger:#ff5252;
+      --muted:#777;
+    }
+    *{box-sizing:border-box;margin:0;-webkit-tap-highlight-color:transparent}
+    html,body{height:100%}
+    body{
+      background:var(--bg);color:var(--text);
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+      user-select:none;-webkit-user-select:none;
+    }
+
+    /* Плавающий таб-бар */
+    .tab-bar{
+      position:fixed; left:16px; right:16px;
+      bottom:calc(16px + env(safe-area-inset-bottom));
+      display:flex; justify-content:space-evenly; align-items:center; gap:8px;
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:56px;
+      padding:16px 14px;
+      box-shadow:0 12px 30px rgba(0,0,0,.4);
+      backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
+      z-index:10;
+    }
+    .tab-item{
+      position:relative; flex:1;
+      display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px;
+      text-decoration:none; color:var(--text);
+      padding:12px 0; border-radius:22px; cursor:pointer; text-align:center;
+    }
+    .tab-item:focus{outline:none}
+    .tab-item::before{
+      content:""; position:absolute; inset:0 2px;
+      background:var(--pill);
+      border:1px solid rgba(74,158,255,.32);
+      border-radius:24px;
+      opacity:0; transform:scale(.985);
+      transition:opacity .18s ease, transform .18s ease;
+    }
+    .tab-item.active{ color:var(--text-active) }
+    .tab-item.active::before{ opacity:1; transform:scale(1.03) }
+    .icon{ width:26px; height:26px; display:block; line-height:0 }
+    .icon svg{
+      width:100%; height:100%;
+      stroke:currentColor; stroke-width:2; fill:none;
+      stroke-linecap:round; stroke-linejoin:round; display:block;
+    }
+    .label{ font-size:12px; font-weight:500 }
+
+    /* Вкладка Звонки */
+    .calls-dialer{
+      position:fixed; left:16px; right:16px;
+      z-index:9; display:none;
+    }
+    .calls-dialer.show{ display:block }
+
+    .display-row{
+      display:flex; align-items:center; justify-content:center; gap:8px;
+      margin-bottom:12px;
+    }
+    .display-number{
+      font-variant-numeric:tabular-nums;
+      font-size:22px; font-weight:800; letter-spacing:.3px;
+      display:flex; gap:2px; align-items:center; flex-wrap:wrap; justify-content:center;
+      line-height:1.3;
+    }
+    .d-fixed{ color:var(--text-active) }
+    .d-sep{ color:var(--text-active) }
+    .d-entered{ color:var(--text-active) }
+    .d-pending{ color:var(--muted) }
+
+    .btn-del{
+      width:38px; height:38px; display:grid; place-items:center;
+      border:1px solid var(--border); background:transparent;
+      color:#bdbdbd; border-radius:12px; cursor:pointer;
+    }
+    .btn-del:hover{ color:var(--text-active); background:rgba(255,255,255,.06) }
+    .btn-del svg{ width:22px; height:22px; stroke:currentColor; fill:none; stroke-width:2 }
+
+    .keypad{
+      display:grid; grid-template-columns:repeat(3,1fr); gap:8px;
+      user-select:none;
+    }
+    .key{
+      display:flex; align-items:center; justify-content:center; flex-direction:column; gap:2px;
+      padding:14px 0; border-radius:14px; cursor:pointer;
+      background:rgba(255,255,255,.05); border:1px solid var(--border); color:var(--text-active);
+      font-size:18px; font-weight:700;
+      transition:transform .06s ease, background .12s ease;
+    }
+    .key:active{ transform:scale(.98); background:rgba(255,255,255,.08) }
+    .key .sub{ font-size:10px; color:#9a9a9a; font-weight:500 }
+    .key.zero{ grid-column:1 / -1; }
+
+    .actions{
+      display:flex; gap:10px; justify-content:center;
+      margin-top:12px;
+    }
+    .btn{
+      flex:1; min-width:0;
+      display:flex; align-items:center; justify-content:center; gap:8px;
+      padding:12px; border-radius:16px; font-weight:700; cursor:pointer;
+      border:1px solid transparent; background:transparent; color:var(--text-active);
+    }
+    .btn[disabled]{ opacity:.5; cursor:not-allowed }
+    .btn svg{ width:18px; height:18px; stroke:currentColor; stroke-width:2; fill:none }
+    .btn-call{
+      background:rgba(25,195,125,.18);
+      border-color:rgba(25,195,125,.25); color:#d7f7ea;
+    }
+    .btn-add{
+      background:rgba(74,158,255,.12);
+      border-color:rgba(74,158,255,.28); color:#e3efff;
+    }
+
+    /* Контакты */
+    .contacts-view{
+      position:fixed; left:16px; right:16px; top:16px;
+      overflow:auto; display:none; z-index:8;
+    }
+    .contacts-view.show{ display:block }
+    .section-title{
+      font-size:14px; color:#9aa0a6; font-weight:700; letter-spacing:.4px;
+      margin:8px 2px;
+    }
+    /* Поиск в контактах */
+    .contacts-search{
+      display:flex; align-items:center; gap:8px;
+      background:rgba(255,255,255,.05); border:1px solid var(--border);
+      border-radius:14px; padding:10px 12px; margin:8px 2px 10px;
+      backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
+    }
+    .contacts-search svg{ width:18px; height:18px; stroke:#9aa0a6; stroke-width:2; fill:none }
+    .contacts-input{
+      flex:1; background:transparent; border:none; outline:none;
+      color:var(--text-active); font-size:14px;
+    }
+
+    .favorites{
+      display:flex; gap:12px; overflow-x:auto; padding:8px 2px 4px;
+      -webkit-overflow-scrolling:touch;
+    }
+    .favorites::-webkit-scrollbar{ display:none }
+    .fav{
+      flex:0 0 auto; width:76px; text-align:center; background:transparent; border:none;
+      color:#e8eaed; cursor:pointer;
+    }
+    .avatar{
+      width:56px; height:56px; border-radius:50%;
+      display:grid; place-items:center;
+      background:transparent; border:none; color:#e8eaed; font-weight:800;
+      margin:0 auto 6px;
+    }
+    .fav-name{ font-size:12px; color:#cfcfcf; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+
+    .empty{ color:var(--muted); font-size:13px; margin:8px 2px }
+
+    .contacts-list{ list-style:none; padding:8px 0 16px; margin:0 }
+    .contact-item{
+      display:flex; align-items:center; gap:12px;
+      padding:10px; border-radius:12px; margin-bottom:8px;
+      background:rgba(255,255,255,.05); border:1px solid var(--border);
+      cursor:pointer;
+    }
+    .contact-ava{
+      width:36px; height:36px; border-radius:50%;
+      display:grid; place-items:center; background:#23252a; color:#e8eaed; font-weight:800;
+      border:1px solid var(--border);
+      font-size:14px;
+    }
+    .contact-main{ flex:1; min-width:0 }
+    .contact-name{ color:#fff; font-weight:700; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+    .contact-sub{ color:#9aa0a6; font-size:12px }
+
+    /* Вкладка Поиск */
+    .search-view{
+      position:fixed; left:16px; right:16px; top:16px;
+      overflow:auto; display:none; z-index:8;
+    }
+    .search-view.show{ display:block }
+    .search-bar{
+      display:flex; align-items:center; gap:8px;
+      background:rgba(255,255,255,.05); border:1px solid var(--border);
+      border-radius:14px; padding:10px 12px; margin-bottom:10px;
+      backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
+    }
+    .search-bar svg{ width:18px; height:18px; stroke:#9aa0a6; stroke-width:2; fill:none }
+    .search-input{
+      flex:1; background:transparent; border:none; outline:none;
+      color:var(--text-active); font-size:14px;
+    }
+    .search-filters{
+      display:flex; gap:8px; margin-bottom:12px;
+    }
+    .filter-btn{
+      padding:8px 16px; border-radius:20px; border:1px solid var(--border);
+      background:rgba(255,255,255,.05); color:var(--text);
+      font-size:12px; font-weight:600; cursor:pointer; transition:all .2s ease;
+    }
+    .filter-btn.active{
+      background:var(--pill); border-color:rgba(74,158,255,.32);
+      color:var(--text-active);
+    }
+    .results-list{ list-style:none; padding:0 0 16px; margin:0 }
+    .results-empty{ color:var(--muted); font-size:13px; margin:8px 2px }
+
+    /* Настройки */
+    .settings-view{
+      position:fixed; left:16px; right:16px; top:16px;
+      overflow:auto; display:none; z-index:8;
+    }
+    .settings-view.show{ display:block }
+    .settings-card{
+      background:var(--panel); border:1px solid var(--border);
+      border-radius:16px; padding:16px; margin:8px 0 120px;
+      backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
+    }
+
+    .profile-row{
+      display:flex; align-items:center; gap:12px;
+      padding:10px; border-radius:12px; border:1px solid var(--border);
+      background:rgba(255,255,255,.05); margin-bottom:12px;
+    }
+    .profile-avatar{
+      width:40px; height:40px; border-radius:50%;
+      display:grid; place-items:center; background:#23252a; border:1px solid var(--border);
+      color:#e8eaed;
+    }
+    .profile-name{ font-weight:800; color:var(--text-active); flex:1 }
+    .profile-rename{
+      width:36px; height:36px; display:grid; place-items:center;
+      border-radius:10px; border:1px solid var(--border);
+      background:rgba(255,255,255,.04); cursor:pointer;
+    }
+    .profile-rename svg{ width:18px; height:18px; stroke:currentColor; fill:none; stroke-width:2 }
+
+    .settings-title{ font-weight:800; font-size:16px; margin:12px 2px 8px; color:var(--text-active) }
+    .s-row{ display:flex; align-items:center; gap:10px; margin-bottom:12px }
+    .s-label{ width:160px; color:#9aa0a6; font-size:13px }
+    .s-input{
+      flex:1; background:rgba(255,255,255,.05); border:1px solid var(--border);
+      border-radius:12px; padding:10px 12px; color:var(--text-active); outline:none;
+      font-size:14px;
+    }
+    .s-switch{ display:flex; align-items:center; gap:10px; }
+    .s-switch input{ width:18px; height:18px; accent-color:var(--accent) }
+
+    .s-actions{ display:flex; gap:10px; margin-top:6px }
+    .s-actions .btn{ flex:1 }
+
+    /* Диалог переименования */
+    .overlay{
+      position:fixed; inset:0; background:rgba(0,0,0,.5);
+      display:none; align-items:center; justify-content:center; z-index:20;
+    }
+    .overlay.show{ display:flex }
+    .modal{
+      width:min(420px, 92vw);
+      background:var(--panel); border:1px solid var(--border);
+      border-radius:16px; padding:16px;
+      backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
+      color:var(--text-active);
+    }
+    .modal-title{ font-weight:800; margin-bottom:10px }
+    .modal-actions{ display:flex; gap:10px; margin-top:12px }
+    .modal-actions .btn{ flex:1 }
+
+    /* Карточка/формы */
+    .contact-card, .add-card, .edit-card{ width:min(420px, 92vw); background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:16px; backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); color:var(--text-active); }
+
+    .cc-head{ display:flex; align-items:center; gap:12px; margin-bottom:12px }
+    .cc-ava{ width:48px; height:48px; border-radius:50%; display:grid; place-items:center; background:#23252a; border:1px solid var(--border); font-weight:800; }
+    .cc-name{ font-weight:800; font-size:16px }
+    .cc-number{ color:#cfcfcf; font-size:13px }
+
+    .cc-actions{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-top:12px }
+    .btn-stack{
+      display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px;
+      padding:10px; border-radius:14px; cursor:pointer;
+      border:1px solid var(--border); background:rgba(255,255,255,.04);
+      color:var(--text-active); text-align:center; font-weight:700; font-size:12px;
+    }
+    .btn-stack:hover{ background:rgba(255,255,255,.07) }
+    .btn-stack svg{ width:22px; height:22px; stroke:currentColor; stroke-width:2; fill:none }
+    .btn-primary{ background:rgba(25,195,125,.18); border-color:rgba(25,195,125,.25); color:#d7f7ea }
+    .btn-info{ background:rgba(74,158,255,.12); border-color:rgba(74,158,255,.28); color:#e3efff }
+    .btn-danger{ background:rgba(255,82,82,.14); border-color:rgba(255,82,82,.28); color:#ffdede }
+
+    .add-head, .edit-head{ font-weight:800; margin-bottom:10px }
+    .add-row, .edit-row{ display:flex; align-items:center; gap:10px; margin-bottom:10px }
+    .add-label, .edit-label{ width:80px; color:#9aa0a6; font-size:13px }
+    .add-input, .edit-input{
+      flex:1; background:rgba(255,255,255,.05); border:1px solid var(--border);
+      border-radius:12px; padding:10px 12px; color:var(--text-active); outline:none; font-size:14px;
+    }
+    .add-number, .edit-number{ color:#cfcfcf; font-weight:700 }
+    .fav-toggle{
+      display:flex; align-items:center; gap:8px; cursor:pointer; user-select:none;
+      color:#cfcfcf;
+    }
+    .fav-toggle .star{ width:22px; height:22px; display:inline-block }
+    .fav-toggle.active{ color:#ffd666 }
+    .fav-toggle.active svg{ stroke:#ffd666; fill:#ffd666 }
+    .add-actions, .edit-actions, .modal-actions{ display:flex; gap:10px; margin-top:12px }
+    .add-actions .btn, .edit-actions .btn{ flex:1 }
+
+    /* Статус звонка */
+    .call-status{ position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:20px; text-align:center; display:none; z-index:30; backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); }
+    .call-status.show{ display:block }
+    .call-status-text{ margin-bottom:10px; font-weight:600 }
+    .call-status-number{ color:var(--accent); font-size:18px; margin-bottom:15px }
+    .call-end{ padding:10px 20px; background:var(--danger); border:none; border-radius:12px; color:white; font-weight:600; cursor:pointer }
+
+    @media (min-width:480px){ .icon{width:28px;height:28px} }
+  </style>
+</head>
+<body>
+
+  <!-- ЗВОНКИ -->
+  <section class="calls-dialer show" id="callsDialer" aria-hidden="false">
+    <div class="display-row">
+      <div class="display-number" id="displayNumber" aria-live="polite"></div>
+      <button class="btn-del" id="backspaceBtn" aria-label="Удалить последний символ">
+        <!-- новая иконка backspace -->
+        <svg viewBox="0 0 24 24">
+          <path d="M20 5H10a2 2 0 0 0-1.6.8L4 12l4.4 6.2A2 2 0 0 0 10 19h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2z"/>
+          <path d="M14.5 9.5l5 5M19.5 9.5l-5 5"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="keypad" aria-label="Цифровая клавиатура">
+      <button class="key" data-k="1">1</button>
+      <button class="key" data-k="2">2<span class="sub">ABC</span></button>
+      <button class="key" data-k="3">3<span class="sub">DEF</span></button>
+      <button class="key" data-k="4">4<span class="sub">GHI</span></button>
+      <button class="key" data-k="5">5<span class="sub">JKL</span></button>
+      <button class="key" data-k="6">6<span class="sub">MNO</span></button>
+      <button class="key" data-k="7">7<span class="sub">PQRS</span></button>
+      <button class="key" data-k="8">8<span class="sub">TUV</span></button>
+      <button class="key" data-k="9">9<span class="sub">WXYZ</span></button>
+      <button class="key zero" data-k="0">0</button>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-call" id="callBtn" disabled>
+        <!-- новая иконка "номер" — dialpad -->
+        <svg viewBox="0 0 24 24">
+          <circle cx="6" cy="5" r="1.5"/><circle cx="12" cy="5" r="1.5"/><circle cx="18" cy="5" r="1.5"/>
+          <circle cx="6" cy="11" r="1.5"/><circle cx="12" cy="11" r="1.5"/><circle cx="18" cy="11" r="1.5"/>
+          <circle cx="6" cy="17" r="1.5"/><circle cx="12" cy="17" r="1.5"/><circle cx="18" cy="17" r="1.5"/>
+        </svg>
+        Позвонить
+      </button>
+      <button class="btn btn-add" id="addBtn" disabled>
+        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+        Добавить контакт
+      </button>
+    </div>
+  </section>
+
+  <!-- КОНТАКТЫ -->
+  <section class="contacts-view" id="contactsView" aria-hidden="true">
+    <div class="section-title">Контакты</div>
+
+    <!-- Поиск по контактам (внутри вкладки Контакты) -->
+    <div class="contacts-search">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M16 16l4 4"/></svg>
+      <input id="contactsSearch" class="contacts-input" type="text" placeholder="Поиск в контактах по имени или номеру" aria-label="Поиск в контактах"/>
+    </div>
+
+    <div class="section-title">Избранные</div>
+    <div class="favorites" id="favorites" role="list"></div>
+    <div class="empty" id="favEmpty">Нет избранных</div>
+
+    <div class="section-title" style="margin-top:14px;">Все контакты</div>
+    <ul class="contacts-list" id="contactsList"></ul>
+    <div class="empty" id="contactsEmpty">Нет контактов</div>
+  </section>
+
+  <!-- ПОИСК -->
+  <section class="search-view" id="searchView" aria-hidden="true">
+    <div class="search-bar">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M16 16l4 4"/></svg>
+      <input id="searchInput" class="search-input" type="text" placeholder="Поиск по контактам или избранным" aria-label="Поиск"/>
+    </div>
+
+    <!-- Фильтры: только Контакты/Избранные -->
+    <div class="search-filters">
+      <button class="filter-btn active" data-filter="contacts">Контакты</button>
+      <button class="filter-btn" data-filter="favorites">Избранные</button>
+    </div>
+
+    <ul class="results-list" id="resultsList"></ul>
+    <div class="results-empty" id="resultsEmpty">Ничего не найдено</div>
+  </section>
+
+  <!-- НАСТРОЙКИ -->
+  <section class="settings-view" id="settingsView" aria-hidden="true">
+    <div class="settings-card">
+      <div class="settings-title">Профиль</div>
+      <div class="profile-row">
+        <div class="profile-avatar" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="22" height="22" style="stroke:#cfcfcf;fill:none;stroke-width:2">
+            <circle cx="12" cy="8" r="3.5"/><path d="M5 19c1.8-3 5-4.5 7-4.5s5.2 1.5 7 4.5"/>
+          </svg>
+        </div>
+        <div class="profile-name" id="profileName">Пользователь</div>
+        <button class="profile-rename" id="renameBtn" aria-label="Переименовать">
+          <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+      </div>
+
+      <div class="s-row">
+        <label class="s-label" for="myPhone">Номер телефона</label>
+        <input id="myPhone" class="s-input" type="text" placeholder="9-(780)-123-456-78"/>
+      </div>
+
+      <div class="settings-title">Аккаунт</div>
+      <div class="s-row">
+        <label class="s-label" for="accountPassword">Пароль</label>
+        <input id="accountPassword" class="s-input" type="password" placeholder="Введите пароль"/>
+      </div>
+      <div class="s-row">
+        <label class="s-label" for="accountNumber">Номер аккаунта</label>
+        <input id="accountNumber" class="s-input" type="text" placeholder="Напр., A-00001"/>
+      </div>
+
+      <div class="settings-title">Конфиденциальность</div>
+      <div class="s-row s-switch">
+        <input id="privacyShowName" type="checkbox" checked/>
+        <label for="privacyShowName">Показывать имя, если звонит чужой номер</label>
+      </div>
+      <div class="s-row s-switch">
+        <input id="privacyAllowUnknown" type="checkbox" checked/>
+        <label for="privacyAllowUnknown">Разрешать звонки от незнакомых</label>
+      </div>
+      <div class="s-row s-switch">
+        <input id="privacyNotifyLogin" type="checkbox" checked/>
+        <label for="privacyNotifyLogin">Уведомлять о входе в аккаунт</label>
+      </div>
+
+      <div class="s-actions">
+        <button class="btn btn-add" id="saveSettings">
+          <svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg>
+          Сохранить
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Диалог переименования -->
+  <div class="overlay" id="renameOverlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="renameTitle">
+      <div class="modal-title" id="renameTitle">Переименовать профиль</div>
+      <input id="renameInput" class="s-input" type="text" placeholder="Введите имя"/>
+      <div class="modal-actions">
+        <button class="btn btn-add" id="renameSave">
+          <svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg>
+          Сохранить
+        </button>
+        <button class="btn" id="renameCancel">
+          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          Отмена
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Карточка контакта -->
+  <div class="overlay" id="overlay" aria-hidden="true">
+    <div class="contact-card" role="dialog" aria-modal="true" aria-labelledby="ccName">
+      <div class="cc-head">
+        <div class="cc-ava" id="ccAva">?</div>
+        <div>
+          <div class="cc-name" id="ccName">Имя</div>
+          <div class="cc-number" id="ccNumber">9-(780)-000-000-00</div>
+        </div>
+      </div>
+      <div class="cc-actions">
+        <button class="btn-stack btn-primary" id="ccCall">
+          <svg viewBox="0 0 24 24">
+            <circle cx="6" cy="5" r="1.5"/><circle cx="12" cy="5" r="1.5"/><circle cx="18" cy="5" r="1.5"/>
+            <circle cx="6" cy="11" r="1.5"/><circle cx="12" cy="11" r="1.5"/><circle cx="18" cy="11" r="1.5"/>
+            <circle cx="6" cy="17" r="1.5"/><circle cx="12" cy="17" r="1.5"/><circle cx="18" cy="17" r="1.5"/>
+          </svg>
+          <span>Позвонить</span>
+        </button>
+        <button class="btn-stack btn-info" id="ccEdit">
+          <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z"/><path d="M14.06 6.19l3.75 3.75"/></svg>
+          <span>Редактировать</span>
+        </button>
+        <button class="btn-stack btn-info" id="ccFav">
+          <svg viewBox="0 0 24 24"><path d="M12 17.3l-6.2 3.3 1.2-6.9L2 8.8l7-1 3-6 3 6 7 1-5 4.9 1.2 6.9z"/></svg>
+          <span>В избранное</span>
+        </button>
+        <button class="btn-stack btn-danger" id="ccDel">
+          <!-- новая иконка удаления -->
+          <svg viewBox="0 0 24 24">
+            <path d="M3 6h18"/>
+            <path d="M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14"/>
+            <path d="M9 6l1-2h4l1 2"/>
+            <path d="M10 11v6M14 11v6"/>
+          </svg>
+          <span>Удалить</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Добавление контакта -->
+  <div class="overlay" id="addOverlay" aria-hidden="true">
+    <div class="add-card" role="dialog" aria-modal="true" aria-labelledby="addTitle">
+      <div class="add-head" id="addTitle">Добавление контакта</div>
+      <div class="add-row">
+        <div class="add-label">Номер</div>
+        <div class="add-number" id="addNumber">9-(780)-000-000-00</div>
+      </div>
+      <div class="add-row">
+        <label class="add-label" for="addName">Имя</label>
+        <input id="addName" class="add-input" type="text" placeholder="Введите имя" autocomplete="name"/>
+      </div>
+      <div class="add-row">
+        <button class="fav-toggle" id="addFav" type="button" aria-pressed="false">
+          <span class="star" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M12 17.3l-6.2 3.3 1.2-6.9L2 8.8l7-1 3-6 3 6 7 1-5 4.9 1.2 6.9z" stroke="currentColor" fill="none" stroke-width="2"/></svg>
+          </span>
+          <span>Добавить в избранные</span>
+        </button>
+      </div>
+      <div class="add-actions">
+        <button class="btn btn-add" id="addCreate">
+          <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+          Создать
+        </button>
+        <button class="btn" id="addCancel">
+          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          Отмена
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Редактирование контакта -->
+  <div class="overlay" id="editOverlay" aria-hidden="true">
+    <div class="edit-card" role="dialog" aria-modal="true" aria-labelledby="editTitle">
+      <div class="edit-head" id="editTitle">Редактирование контакта</div>
+      <div class="edit-row">
+        <label class="edit-label" for="editName">Имя</label>
+        <input id="editName" class="edit-input" type="text" placeholder="Введите имя" autocomplete="name"/>
+      </div>
+      <div class="edit-row">
+        <label class="edit-label" for="editNumber">Номер</label>
+        <input id="editNumber" class="edit-input" type="text" placeholder="9-(780)-000-000-00" autocomplete="tel"/>
+      </div>
+      <div class="edit-row">
+        <button class="fav-toggle" id="editFav" type="button" aria-pressed="false">
+          <span class="star" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M12 17.3l-6.2 3.3 1.2-6.9L2 8.8l7-1 3-6 3 6 7 1-5 4.9 1.2 6.9z" stroke="currentColor" fill="none" stroke-width="2"/></svg>
+          </span>
+          <span>В избранные</span>
+        </button>
+      </div>
+      <div class="edit-actions">
+        <button class="btn btn-add" id="editSave">
+          <svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg>
+          Сохранить
+        </button>
+        <button class="btn" id="editCancel">
+          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          Отмена
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Статус звонка -->
+  <div class="call-status" id="callStatus">
+    <div class="call-status-text">Звонок...</div>
+    <div class="call-status-number" id="callStatusNumber"></div>
+    <button class="call-end" id="endCallBtn">Завершить</button>
+  </div>
+
+  <!-- TAB BAR -->
+  <nav class="tab-bar" role="tablist" aria-label="Основная навигация">
+    <a href="#" class="tab-item" data-tab="contacts" role="tab" aria-selected="false">
+      <span class="icon" aria-hidden="true">
+        <!-- иконка контактов — адресная книга -->
+        <svg viewBox="0 0 24 24">
+          <path d="M5 3h11a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5z"/>
+          <path d="M5 7h-2M5 12h-2M5 17h-2"/>
+          <circle cx="11" cy="9" r="2"/>
+          <path d="M8 16c0-2 2-3 3-3s3 1 3 3"/>
+        </svg>
+      </span>
+      <span class="label">Контакты</span>
+    </a>
+    <a href="#" class="tab-item" data-tab="search" role="tab" aria-selected="false">
+      <span class="icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M16 16l4 4"/></svg>
+      </span>
+      <span class="label">Поиск</span>
+    </a>
+    <a href="#" class="tab-item active" data-tab="calls" role="tab" aria-selected="true">
+      <span class="icon" aria-hidden="true">
+        <!-- иконка "номер" — dialpad -->
+        <svg viewBox="0 0 24 24">
+          <circle cx="6" cy="5" r="1.5"/><circle cx="12" cy="5" r="1.5"/><circle cx="18" cy="5" r="1.5"/>
+          <circle cx="6" cy="11" r="1.5"/><circle cx="12" cy="11" r="1.5"/><circle cx="18" cy="11" r="1.5"/>
+          <circle cx="6" cy="17" r="1.5"/><circle cx="12" cy="17" r="1.5"/><circle cx="18" cy="17" r="1.5"/>
+        </svg>
+      </span>
+      <span class="label">Звонки</span>
+    </a>
+    <a href="#" class="tab-item" data-tab="settings" role="tab" aria-selected="false">
+      <span class="icon" aria-hidden="true">
+        <!-- иконка настроек — шестерня -->
+        <svg viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a7.8 7.8 0 0 0 .1-2l2-1.2-2-3.5-2.3.6a7.6 7.6 0 0 0-1.7-1l-.3-2.4h-4l-.3 2.4a7.6 7.6 0 0 0-1.7 1L4.5 8.3l-2 3.5 2 1.2a7.8 7.8 0 0 0 .1 2l-2 1.2 2 3.5 2.3-.6c.5.4 1.1.7 1.7 1l.3 2.4h4l.3-2.4c.6-.3 1.2-.6 1.7-1l2.3.6 2-3.5-2-1.2z"/>
+        </svg>
+      </span>
+      <span class="label">Настройки</span>
+    </a>
+  </nav>
+
+  <script>
+    // --- Настройки (localStorage) ---
+    const SETTINGS_KEY = 'phone_settings_v2';
+    let phoneSettings = {
+      accountName: 'Пользователь',
+      myNumber: '',
+      accountNumber: '',
+      password: '',
+      privacyShowNameToUnknown: true,
+      privacyAllowUnknownCalls: true,
+      privacyNotifyLogin: true,
+      useOpus: true // внутренняя опция для звонков (UI не отображаем)
+    };
+
+    function loadSettings(){
+      try{
+        const raw = localStorage.getItem(SETTINGS_KEY);
+        if(raw){
+          const parsed = JSON.parse(raw);
+          phoneSettings = { ...phoneSettings, ...parsed };
+        }else{
+          // миграция со старого ключа (если был)
+          const oldRaw = localStorage.getItem('phone_settings_v1');
+          if(oldRaw){
+            const old = JSON.parse(oldRaw);
+            phoneSettings.myNumber = old.myNumber || '';
+            phoneSettings.useOpus = typeof old.useOpus === 'boolean' ? old.useOpus : true;
+          }
+        }
+      }catch(e){}
+    }
+    function saveSettings(){
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(phoneSettings));
+    }
+
+    // --- WebRTC и Opus Codec для звонков (локально) ---
+    class LocalCallService {
+      constructor(settings) {
+        this.settings = settings || { useOpus: true };
+        this.peerConnection = null;
+        this.localStream = null;
+        this.isCallActive = false;
+        this.localServer = new Map();
+        this.initLocalServer();
+      }
+      updateSettings(settings){ this.settings = settings; }
+      initLocalServer() {
+        this.localServer.set('9-(780)-123-456-78', { name: 'Тестовый контакт', available: true });
+        this.localServer.set('9-(780)-987-654-32', { name: 'Другой контакт', available: true });
+      }
+      async searchByNumber(number) { return this.localServer.get(number) || null; }
+      async initiateCall(number) {
+        if (this.isCallActive) throw new Error('Звонок уже активен');
+        const contact = await this.searchByNumber(number) || { name: 'Неизвестный', available: true };
+        if (!contact.available) throw new Error('Контакт недоступен');
+
+        try {
+          this.peerConnection = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+          this.localStream = await navigator.mediaDevices.getUserMedia({
+            audio: { echoCancellation:true, noiseSuppression:true, autoGainControl:true }
+          });
+          this.localStream.getTracks().forEach(track => this.peerConnection.addTrack(track, this.localStream));
+
+          if (this.settings.useOpus) {
+            const transceivers = this.peerConnection.getTransceivers();
+            transceivers.forEach(transceiver => {
+              const caps = RTCRtpSender.getCapabilities('audio');
+              const opus = caps?.codecs?.find(c => (c.mimeType || '').toLowerCase() === 'audio/opus');
+              if (opus) transceiver.setCodecPreferences([opus]);
+            });
+          }
+
+          this.isCallActive = true;
+          return { success: true, contact };
+        } catch (e) {
+          this.endCall();
+          throw e;
+        }
+      }
+      endCall() {
+        if (this.localStream) { this.localStream.getTracks().forEach(t=>t.stop()); this.localStream = null; }
+        if (this.peerConnection) { this.peerConnection.close(); this.peerConnection = null; }
+        this.isCallActive = false;
+      }
+    }
+
+    // Инициализация настроек/сервиса
+    loadSettings();
+    const callService = new LocalCallService(phoneSettings);
+
+    // --- Переключение вкладок и раскладка ---
+    const tabs = document.querySelectorAll('.tab-item');
+    const dialer = document.getElementById('callsDialer');
+    const contactsView = document.getElementById('contactsView');
+    const searchView = document.getElementById('searchView');
+    const settingsView = document.getElementById('settingsView');
+    const tabBar = document.querySelector('.tab-bar');
+
+    function showSection(tab){
+      for (const el of [dialer, contactsView, searchView, settingsView]) {
+        if(!el) continue;
+        el.classList.remove('show'); el.setAttribute('aria-hidden','true');
+      }
+      if(tab === 'calls'){ dialer.classList.add('show'); dialer.setAttribute('aria-hidden','false'); }
+      if(tab === 'contacts'){ contactsView.classList.add('show'); contactsView.setAttribute('aria-hidden','false'); }
+      if(tab === 'search'){ searchView.classList.add('show'); searchView.setAttribute('aria-hidden','false'); }
+      if(tab === 'settings'){ settingsView.classList.add('show'); settingsView.setAttribute('aria-hidden','false'); }
+      adjustLayout();
+    }
+    function setActiveTab(el){
+      tabs.forEach(i => { i.classList.remove('active'); i.setAttribute('aria-selected','false'); });
+      el.classList.add('active'); el.setAttribute('aria-selected','true');
+      showSection(el.dataset.tab);
+    }
+    tabs.forEach(el => el.addEventListener('click', e => { e.preventDefault(); setActiveTab(el); }));
+
+    function adjustLayout(){
+      const tbH = tabBar?.offsetHeight || 80;
+      const bottom = tbH + 24;
+      if(dialer) dialer.style.bottom = `calc(${bottom}px + env(safe-area-inset-bottom))`;
+      if(contactsView) contactsView.style.bottom = `calc(${bottom}px + env(safe-area-inset-bottom))`;
+      if(searchView) searchView.style.bottom = `calc(${bottom}px + env(safe-area-inset-bottom))`;
+      if(settingsView) settingsView.style.bottom = `calc(${bottom}px + env(safe-area-inset-bottom))`;
+    }
+    window.addEventListener('resize', adjustLayout);
+
+    // --- Dialer: номер 9-(780)-000-000-00 ---
+    const TEMPLATE_PREFIX = '9-(780)-';
+    const PLACEHOLDER = '000-000-00';
+    const MAX_DIGITS = 8;
+    let digits = '';
+
+    const display = document.getElementById('displayNumber');
+    const backspaceBtn = document.getElementById('backspaceBtn');
+    const callBtn = document.getElementById('callBtn');
+    const addBtn = document.getElementById('addBtn');
+    const keypad = document.querySelector('.keypad');
+
+    function renderDisplay(){
+      display.innerHTML = '';
+      const fixedSpan = document.createElement('span');
+      fixedSpan.className = 'd-fixed';
+      fixedSpan.textContent = TEMPLATE_PREFIX;
+      display.appendChild(fixedSpan);
+
+      let i = 0;
+      for(const ch of PLACEHOLDER){
+        if(ch === '0'){
+          const s = document.createElement('span');
+          if(i < digits.length){ s.className = 'd-entered'; s.textContent = digits[i++]; }
+          else { s.className = 'd-pending'; s.textContent = '0'; }
+          display.appendChild(s);
+        } else {
+          const sep = document.createElement('span');
+          sep.className = 'd-sep'; sep.textContent = ch;
+          display.appendChild(sep);
+        }
+      }
+      const ready = digits.length === MAX_DIGITS;
+      callBtn.disabled = !ready;
+      addBtn.disabled = !ready;
+      if(ready) updateAddMenuNumber();
+    }
+    keypad.addEventListener('click', (e) => {
+      const key = e.target.closest('.key'); if(!key) return;
+      const k = key.dataset.k;
+      if(/\d/.test(k) && digits.length < MAX_DIGITS){ digits += k; renderDisplay(); }
+    });
+    backspaceBtn.addEventListener('click', () => {
+      if(digits.length > 0){ digits = digits.slice(0, -1); renderDisplay(); }
+    });
+
+    // Вызов
+    callBtn.addEventListener('click', async () => {
+      if(digits.length !== MAX_DIGITS) return;
+      const number = TEMPLATE_PREFIX + formatTail();
+      const callStatus = document.getElementById('callStatus');
+      const callStatusNumber = document.getElementById('callStatusNumber');
+      try {
+        callStatusNumber.textContent = number;
+        callStatus.classList.add('show');
+        await callService.initiateCall(number);
+      } catch (error) {
+        alert('Ошибка звонка: ' + error.message);
+        callStatus.classList.remove('show');
+      }
+    });
+
+    function formatTail(){
+      let out = '', i = 0;
+      for(const ch of PLACEHOLDER){ out += (ch === '0') ? (digits[i++] || '0') : ch; }
+      return out;
+    }
+
+    // Завершение звонка
+    const endCallBtn = document.getElementById('endCallBtn');
+    endCallBtn.addEventListener('click', () => {
+      callService.endCall();
+      document.getElementById('callStatus').classList.remove('show');
+    });
+
+    // --- Контакты состояние ---
+    let contacts = []; // {id, name, number, favorite}
+    let seq = 1;
+
+    const contactsListEl = document.getElementById('contactsList');
+    const contactsEmptyEl = document.getElementById('contactsEmpty');
+    const favWrap = document.getElementById('favorites');
+    const favEmptyEl = document.getElementById('favEmpty');
+
+    function initials(name){
+      const parts = (name || '').trim().split(/\s+/).filter(Boolean);
+      if(parts.length===0) return '?';
+      if(parts.length===1) return (parts[0][0]||'?').toUpperCase();
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+
+    // Поиск по контактам (во вкладке "Контакты")
+    let contactsQuery = '';
+    const contactsSearchInput = document.getElementById('contactsSearch');
+    if(contactsSearchInput){
+      contactsSearchInput.addEventListener('input', (e)=>{
+        contactsQuery = (e.target.value || '').trim().toLowerCase();
+        renderContacts();
+      });
+    }
+
+    function filteredContacts(){
+      if(!contactsQuery) return contacts.slice();
+      return contacts.filter(c =>
+        c.name.toLowerCase().includes(contactsQuery) ||
+        c.number.toLowerCase().includes(contactsQuery)
+      );
+    }
+
+    function renderContacts(){
+      contactsListEl.innerHTML = '';
+      const base = filteredContacts().sort((a,b)=> a.name.localeCompare(b.name,'ru'));
+
+      base.forEach(c => {
+        const li = document.createElement('li');
+        li.className = 'contact-item';
+        li.dataset.id = c.id;
+        li.innerHTML = `
+          <div class="contact-ava">${initials(c.name)}</div>
+          <div class="contact-main">
+            <div class="contact-name">${c.name}</div>
+            <div class="contact-sub">${c.number}</div>
+          </div>
+        `;
+        li.addEventListener('click', ()=> openCard(c.id));
+        contactsListEl.appendChild(li);
+      });
+      contactsEmptyEl.style.display = base.length ? 'none' : 'block';
+
+      // Избранные (с учетом поиска)
+      favWrap.innerHTML = '';
+      const favs = base.filter(c => c.favorite);
+      favs.forEach(c => {
+        const btn = document.createElement('button');
+        btn.className = 'fav'; btn.dataset.id = c.id;
+        btn.innerHTML = `
+          <div class="avatar">${initials(c.name)}</div>
+          <div class="fav-name">${c.name}</div>
+        `;
+        btn.addEventListener('click', ()=> openCard(c.id));
+        favWrap.appendChild(btn);
+      });
+      if(contactsQuery){
+        favEmptyEl.style.display = favs.length ? 'none' : 'block';
+      }else{
+        const hasFavOverall = contacts.some(c=>c.favorite);
+        favEmptyEl.style.display = hasFavOverall ? 'none' : 'block';
+      }
+
+      // Обновить результаты в "Поиск"
+      renderSearchResults(document.getElementById('searchInput')?.value || '', currentFilter);
+    }
+
+    // --- Карточка контакта ---
+    const overlay = document.getElementById('overlay');
+    const ccAva = document.getElementById('ccAva');
+    const ccName = document.getElementById('ccName');
+    const ccNumber = document.getElementById('ccNumber');
+    const ccCall = document.getElementById('ccCall');
+    const ccFav = document.getElementById('ccFav');
+    const ccDel = document.getElementById('ccDel');
+    const ccEdit = document.getElementById('ccEdit');
+    let currentId = null;
+
+    function openCard(id){
+      const c = contacts.find(x=>x.id===id); if(!c) return;
+      currentId = id;
+      ccAva.textContent = initials(c.name);
+      ccName.textContent = c.name;
+      ccNumber.textContent = c.number;
+      ccFav.innerHTML = `
+        <svg viewBox="0 0 24 24"><path d="M12 17.3l-6.2 3.3 1.2-6.9L2 8.8l7-1 3-6 3 6 7 1-5 4.9 1.2 6.9z"/></svg>
+        <span>${c.favorite ? 'Убрать из избранного' : 'В избранное'}</span>
+      `;
+      overlay.classList.add('show');
+      overlay.setAttribute('aria-hidden','false');
+    }
+    function closeCard(){
+      overlay.classList.remove('show');
+      overlay.setAttribute('aria-hidden','true');
+      currentId = null;
+    }
+    overlay.addEventListener('click', (e)=>{ if(e.target===overlay) closeCard(); });
+
+    ccCall.addEventListener('click', async () => {
+      const c = contacts.find(x=>x.id===currentId); if(!c) return;
+      closeCard();
+      try {
+        const callStatus = document.getElementById('callStatus');
+        const callStatusNumber = document.getElementById('callStatusNumber');
+        callStatusNumber.textContent = c.number;
+        callStatus.classList.add('show');
+        await callService.initiateCall(c.number);
+      } catch (error) {
+        alert('Ошибка звонка: ' + error.message);
+        document.getElementById('callStatus').classList.remove('show');
+      }
+    });
+    ccFav.addEventListener('click', () => {
+      const c = contacts.find(x=>x.id===currentId); if(!c) return;
+      c.favorite = !c.favorite; renderContacts(); openCard(c.id);
+    });
+    ccDel.addEventListener('click', () => {
+      const idx = contacts.findIndex(x=>x.id===currentId);
+      if(idx>=0 && confirm('Удалить контакт?')){ contacts.splice(idx,1); renderContacts(); closeCard(); }
+    });
+
+    // --- Edit контакт ---
+    const editOverlay = document.getElementById('editOverlay');
+    const editName = document.getElementById('editName');
+    const editNumber = document.getElementById('editNumber');
+    const editFav = document.getElementById('editFav');
+    const editSave = document.getElementById('editSave');
+    const editCancel = document.getElementById('editCancel');
+
+    function openEdit(){
+      const c = contacts.find(x=>x.id===currentId); if(!c) return;
+      editOverlay.classList.add('show');
+      editOverlay.setAttribute('aria-hidden','false');
+      editOverlay.dataset.id = c.id;
+      editName.value = c.name;
+      editNumber.value = c.number;
+      if(c.favorite){
+        editFav.classList.add('active');
+        editFav.setAttribute('aria-pressed','true');
+      }else{
+        editFav.classList.remove('active');
+        editFav.setAttribute('aria-pressed','false');
+      }
+      setTimeout(()=> editName.focus(), 0);
+    }
+    function closeEdit(){
+      editOverlay.classList.remove('show');
+      editOverlay.setAttribute('aria-hidden','true');
+      delete editOverlay.dataset.id;
+    }
+    editOverlay.addEventListener('click', (e)=>{ if(e.target===editOverlay) closeEdit(); });
+    editFav.addEventListener('click', () => {
+      const active = editFav.classList.toggle('active');
+      editFav.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+    ccEdit.addEventListener('click', openEdit);
+    editCancel.addEventListener('click', closeEdit);
+
+    function normalizeNumber(num){ return (num || '').trim(); }
+    function numberExists(num, excludeId=null){
+      const n = normalizeNumber(num);
+      return contacts.some(c => c.number === n && c.id !== excludeId);
+    }
+
+    editSave.addEventListener('click', () => {
+      const id = editOverlay.dataset.id;
+      const c = contacts.find(x=>x.id===id); if(!c) return;
+      const newName = (editName.value || '').trim() || 'Без имени';
+      const newNumber = normalizeNumber(editNumber.value);
+      const newFav = editFav.classList.contains('active');
+
+      if(!newNumber){ alert('Введите номер'); return; }
+      if(numberExists(newNumber, id)){ alert('Контакт с таким номером уже существует'); return; }
+
+      c.name = newName;
+      c.number = newNumber;
+      c.favorite = newFav;
+      renderContacts();
+      closeEdit();
+      openCard(c.id);
+    });
+
+    // --- Добавление контакта ---
+    const addOverlay = document.getElementById('addOverlay');
+    const addName = document.getElementById('addName');
+    const addNumber = document.getElementById('addNumber');
+    const addFav = document.getElementById('addFav');
+    const addCreate = document.getElementById('addCreate');
+    const addCancel = document.getElementById('addCancel');
+
+    function updateAddMenuNumber(){
+      addNumber.textContent = TEMPLATE_PREFIX + formatTail();
+    }
+    function openAddMenu(){
+      updateAddMenuNumber();
+      addName.value = '';
+      addFav.classList.remove('active');
+      addFav.setAttribute('aria-pressed','false');
+      addOverlay.classList.add('show');
+      addOverlay.setAttribute('aria-hidden','false');
+      setTimeout(()=> addName.focus(), 0);
+    }
+    function closeAddMenu(){
+      addOverlay.classList.remove('show');
+      addOverlay.setAttribute('aria-hidden','true');
+    }
+
+    addBtn.addEventListener('click', () => {
+      if(digits.length !== MAX_DIGITS) return;
+      openAddMenu();
+    });
+    addCancel.addEventListener('click', closeAddMenu);
+    addOverlay.addEventListener('click', (e)=>{ if(e.target===addOverlay) closeAddMenu(); });
+    addFav.addEventListener('click', () => {
+      const active = addFav.classList.toggle('active');
+      addFav.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+    addCreate.addEventListener('click', () => {
+      if(digits.length !== MAX_DIGITS) return;
+      const name = (addName.value || '').trim() || 'Без имени';
+      const number = TEMPLATE_PREFIX + formatTail();
+      const favorite = addFav.classList.contains('active');
+
+      if(numberExists(number)){ alert('Контакт с таким номером уже существует'); return; }
+
+      const newContact = { id: String(seq++), name, number, favorite };
+      contacts.push(newContact);
+      renderContacts();
+      closeAddMenu();
+      const tabContacts = Array.from(tabs).find(t=>t.dataset.tab==='contacts');
+      if(tabContacts) setActiveTab(tabContacts);
+      openCard(newContact.id);
+    });
+
+    // --- Поиск (вкладка Поиск): только контакты/избранные ---
+    const searchInput = document.getElementById('searchInput');
+    const resultsList = document.getElementById('resultsList');
+    const resultsEmpty = document.getElementById('resultsEmpty');
+    const filterBtns = document.querySelectorAll('.filter-btn');
+    let currentFilter = 'contacts';
+
+    function setFilter(filter){
+      currentFilter = filter;
+      filterBtns.forEach(b => b.classList.toggle('active', b.dataset.filter === filter));
+      renderSearchResults(searchInput.value, currentFilter);
+    }
+    filterBtns.forEach(btn => btn.addEventListener('click', () => setFilter(btn.dataset.filter)));
+
+    function renderSearchResults(query, filter = 'contacts'){
+      if(!resultsList) return;
+      const q = (query || '').trim().toLowerCase();
+      resultsList.innerHTML = '';
+      let results = [];
+
+      let contactResults = contacts;
+      if (filter === 'favorites') contactResults = contacts.filter(c => c.favorite);
+      if (q) {
+        contactResults = contactResults.filter(c =>
+          c.name.toLowerCase().includes(q) || c.number.toLowerCase().includes(q)
+        );
+      }
+      results = contactResults.map(c => ({...c, type:'contact'}));
+
+      results.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ru'));
+
+      results.forEach(item => {
+        const li = document.createElement('li');
+        li.className = 'contact-item';
+        li.innerHTML = `
+          <div class="contact-ava">${initials(item.name)}</div>
+          <div class="contact-main">
+            <div class="contact-name">${item.name || 'Неизвестный'}</div>
+            <div class="contact-sub">${item.number}</div>
+          </div>
+        `;
+        li.addEventListener('click', () => openCard(item.id));
+        resultsList.appendChild(li);
+      });
+
+      resultsEmpty.style.display = results.length ? 'none' : 'block';
+      resultsEmpty.textContent = (!q && filter !== 'favorites') ? 'Начните ввод для поиска' : 'Ничего не найдено';
+    }
+    searchInput.addEventListener('input', (e)=> renderSearchResults(e.target.value, currentFilter));
+
+    // --- Настройки UI <-> state ---
+    const profileNameEl = document.getElementById('profileName');
+    const renameBtn = document.getElementById('renameBtn');
+    const renameOverlay = document.getElementById('renameOverlay');
+    const renameInput = document.getElementById('renameInput');
+    const renameSave = document.getElementById('renameSave');
+    const renameCancel = document.getElementById('renameCancel');
+
+    const myPhoneInput = document.getElementById('myPhone');
+    const accountPasswordInput = document.getElementById('accountPassword');
+    const accountNumberInput = document.getElementById('accountNumber');
+    const privacyShowNameInput = document.getElementById('privacyShowName');
+    const privacyAllowUnknownInput = document.getElementById('privacyAllowUnknown');
+    const privacyNotifyLoginInput = document.getElementById('privacyNotifyLogin');
+    const saveSettingsBtn = document.getElementById('saveSettings');
+
+    function applySettingsToUI(){
+      profileNameEl.textContent = phoneSettings.accountName || 'Пользователь';
+      myPhoneInput.value = phoneSettings.myNumber || '';
+      accountNumberInput.value = phoneSettings.accountNumber || '';
+      accountPasswordInput.value = phoneSettings.password || '';
+      privacyShowNameInput.checked = !!phoneSettings.privacyShowNameToUnknown;
+      privacyAllowUnknownInput.checked = !!phoneSettings.privacyAllowUnknownCalls;
+      privacyNotifyLoginInput.checked = !!phoneSettings.privacyNotifyLogin;
+    }
+    function readSettingsFromUI(){
+      phoneSettings.myNumber = (myPhoneInput.value || '').trim();
+      phoneSettings.accountNumber = (accountNumberInput.value || '').trim();
+      phoneSettings.password = (accountPasswordInput.value || '').trim();
+      phoneSettings.privacyShowNameToUnknown = !!privacyShowNameInput.checked;
+      phoneSettings.privacyAllowUnknownCalls = !!privacyAllowUnknownInput.checked;
+      phoneSettings.privacyNotifyLogin = !!privacyNotifyLoginInput.checked;
+      saveSettings();
+      callService.updateSettings(phoneSettings);
+    }
+    saveSettingsBtn.addEventListener('click', () => { readSettingsFromUI(); alert('Настройки сохранены'); });
+
+    // Переименование
+    function openRename(){
+      renameInput.value = phoneSettings.accountName || '';
+      renameOverlay.classList.add('show');
+      renameOverlay.setAttribute('aria-hidden','false');
+      setTimeout(()=> renameInput.focus(), 0);
+    }
+    function closeRename(){
+      renameOverlay.classList.remove('show');
+      renameOverlay.setAttribute('aria-hidden','true');
+    }
+    renameBtn.addEventListener('click', openRename);
+    renameCancel.addEventListener('click', closeRename);
+    renameOverlay.addEventListener('click', (e)=>{ if(e.target===renameOverlay) closeRename(); });
+    renameSave.addEventListener('click', () => {
+      const val = (renameInput.value || '').trim();
+      phoneSettings.accountName = val || 'Пользователь';
+      saveSettings();
+      profileNameEl.textContent = phoneSettings.accountName;
+      closeRename();
+    });
+
+    // --- Инициализация ---
+    renderDisplay();
+    adjustLayout();
+    renderContacts();
+    renderSearchResults('', currentFilter);
+    applySettingsToUI();
+    showSection('calls'); // старт — Звонки
+  </script>
+</body>
+</html>
+
